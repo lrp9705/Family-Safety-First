@@ -1,6 +1,6 @@
 require("dotenv").config();
 const express = require("express");
-
+const { evaluatePayment } = require("./guardian");
 const app = express();
 app.use(express.json());
 
@@ -51,7 +51,19 @@ app.get("/", (req, res) => {
 app.post("/api/orders", async (req, res) => {
   try {
     const amount = req.body.amount || "10.00";
+
+    // Guardian check BEFORE anything reaches PayPal
+    const verdict = evaluatePayment({
+      amount,
+      recipient: req.body.recipient,
+      note: req.body.note,
+    });
+    if (verdict.decision !== "approve") {
+      return res.status(403).json(verdict);
+    }
+
     const token = await getAccessToken();
+    
 
     const response = await fetch(`${PAYPAL_BASE}/v2/checkout/orders`, {
       method: "POST",

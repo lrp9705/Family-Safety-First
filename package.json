@@ -19,6 +19,7 @@
   },
   "homepage": "https://github.com/lrp9705/Family-Safety-First#readme",
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.3.0",
     "dotenv": "^18.0.8",
     "express": "^5.3.0"
   }

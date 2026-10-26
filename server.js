@@ -1,6 +1,8 @@
 require("dotenv").config();
 const express = require("express");
-const { evaluatePayment } = require("./guardian");
+const { evaluatePayment, defaultRules } = require("./guardian");
+const { parseRules } = require("./ai-rules");
+
 const app = express();
 app.use(express.json());
 
@@ -37,33 +39,59 @@ async function getAccessToken() {
   if (!res.ok) throw new Error("Token request failed: " + JSON.stringify(data));
 
   cachedToken = data.access_token;
-  // refresh 60 seconds before it really expires
   tokenExpiresAt = Date.now() + (data.expires_in - 60) * 1000;
   return cachedToken;
 }
 
-// ---- Health check: confirms the server is running ----
+// ---- The rules currently in force (starts with the defaults) ----
+let currentRules = defaultRules;
+
+// ---- Health check ----
 app.get("/", (req, res) => {
   res.send("Family Safety First server is running");
 });
 
-// ---- Create an order ----
+// ---- Guardian sends a plain-English sentence; we parse and activate it ----
+app.post("/api/rules", async (req, res) => {
+  try {
+    const text = (req.body.text || "").slice(0, 1000);
+    if (!text.trim()) {
+      return res.status(400).json({ error: "Please write the rules first." });
+    }
+
+    const { rules, summary } = await parseRules(text);
+    currentRules = rules;
+    res.json({ summary, rules });
+  } catch (err) {
+    console.error(err.message);
+    res.status(400).json({ error: "I couldn't turn that into rules. Try rewording it." });
+  }
+});
+
+// ---- Show the rules currently active ----
+app.get("/api/rules", (req, res) => {
+  res.json({ rules: currentRules });
+});
+
+// ---- Create an order (the Guardian checks it first) ----
 app.post("/api/orders", async (req, res) => {
   try {
     const amount = req.body.amount || "10.00";
 
     // Guardian check BEFORE anything reaches PayPal
-    const verdict = evaluatePayment({
-      amount,
-      recipient: req.body.recipient,
-      note: req.body.note,
-    });
+    const verdict = evaluatePayment(
+      {
+        amount,
+        recipient: req.body.recipient,
+        note: req.body.note,
+      },
+      currentRules
+    );
     if (verdict.decision !== "approve") {
       return res.status(403).json(verdict);
     }
 
     const token = await getAccessToken();
-    
 
     const response = await fetch(`${PAYPAL_BASE}/v2/checkout/orders`, {
       method: "POST",

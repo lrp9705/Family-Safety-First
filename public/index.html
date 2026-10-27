@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Family Safety First - Pay</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav>
+    <strong>Family Safety First</strong>
+    <a href="index.html">Member</a>
+    <a href="guardian.html">Guardian</a>
+  </nav>
+  <main>
+    <h1>Send a payment</h1>
+    <p class="muted">Your Guardian helps keep your money safe. Every payment is checked before it is sent.</p>
+
+    <div class="card">
+      <label>Amount (USD)
+        <input id="amount" type="number" min="0.01" step="0.01" value="45">
+      </label>
+      <label>Send to (email)
+        <input id="recipient" type="email" placeholder="pharmacy@example.com">
+      </label>
+      <label>Note (optional)
+        <input id="note" type="text" maxlength="200" placeholder="What is this payment for?">
+      </label>
+      <button id="pay">Pay</button>
+    </div>
+
+    <div id="result" class="card hidden"></div>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const result = $("result");
+    let timer = null;
+
+    function show(kind, title, lines, link) {
+      result.className = "card " + kind;
+      result.replaceChildren();
+      const h = document.createElement("h2");
+      h.textContent = title;
+      result.appendChild(h);
+      for (const line of lines) {
+        const p = document.createElement("p");
+        p.textContent = line;
+        result.appendChild(p);
+      }
+      if (link && link.startsWith("https://")) {
+        const a = document.createElement("a");
+        a.href = link;
+        a.target = "_blank";
+        a.rel = "noopener";
+        a.className = "button";
+        a.textContent = "Continue to PayPal (sandbox)";
+        result.appendChild(a);
+      }
+    }
+
+    function watch(id) {
+      timer = setInterval(async () => {
+        try {
+          const res = await fetch("/api/requests/" + id);
+          const r = await res.json();
+          if (r.status === "approved") {
+            clearInterval(timer);
+            show("ok", "Your Guardian approved it", ["You can continue with your payment."], r.approveUrl);
+          } else if (r.status === "declined") {
+            clearInterval(timer);
+            show("bad", "Your Guardian said no", ["The payment was not sent."]);
+          }
+        } catch (e) { /* try again on the next tick */ }
+      }, 3000);
+    }
+
+    $("pay").addEventListener("click", async () => {
+      clearInterval(timer);
+      $("pay").disabled = true;
+      const body = {
+        amount: $("amount").value,
+        recipient: $("recipient").value.trim(),
+        note: $("note").value,
+      };
+      try {
+        const res = await fetch("/api/orders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+
+        if (data.decision === "approve") {
+          show("ok", "Payment approved", ["This payment looks normal."], data.approveUrl);
+        } else if (data.decision === "ask") {
+          show("wait", "Waiting for your Guardian", [
+            ...data.reasons,
+            "Your Guardian has been asked. This page will update by itself.",
+          ]);
+          watch(data.requestId);
+        } else if (data.decision === "block") {
+          show("bad", "This payment was stopped", [
+            ...data.reasons,
+            "Your money was not sent. If you think this is a mistake, talk to your Guardian.",
+          ]);
+        } else {
+          show("bad", "Something went wrong", [data.error || "Please try again."]);
+        }
+      } catch (e) {
+        show("bad", "Something went wrong", ["Could not reach the server."]);
+      }
+      $("pay").disabled = false;
+    });
+  </script>
+</body>
+</html>

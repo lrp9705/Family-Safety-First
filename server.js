@@ -6,6 +6,7 @@ const { parseRules } = require("./ai-rules");
 
 const app = express();
 app.use(express.json());
+app.use(express.static("public"));
 
 const PORT = 3000;
 const PAYPAL_BASE = "https://api-m.sandbox.paypal.com";
@@ -191,6 +192,7 @@ app.post("/api/requests/:id/decide", async (req, res) => {
 
     const order = await createPayPalOrder(request.payment.amount);
     request.status = "approved";
+    request.order = { id: order.id, approveUrl: order.approveUrl };
     logEvent("guardian_approved", request.payment, request.reasons, request.id);
     res.status(order.httpStatus).json({
       requestId: request.id,
@@ -203,6 +205,17 @@ app.post("/api/requests/:id/decide", async (req, res) => {
     console.error(err.message);
     res.status(500).json({ error: "Could not process the decision" });
   }
+});
+
+
+// ---- Member checks on one request ----
+app.get("/api/requests/:id", (req, res) => {
+  const request = pendingRequests.find((r) => r.id === req.params.id);
+  if (!request) return res.status(404).json({ error: "Request not found." });
+  res.json({
+    status: request.status,
+    approveUrl: request.order ? request.order.approveUrl : null,
+  });
 });
 
 // ---- Timeline (newest first) ----

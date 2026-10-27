@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Family Safety First - Guardian</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav>
+    <strong>Family Safety First</strong>
+    <a href="index.html">Member</a>
+    <a href="guardian.html">Guardian</a>
+  </nav>
+  <main>
+    <h1>Guardian dashboard</h1>
+
+    <h2>1. Write the rules in plain English</h2>
+    <div class="card">
+      <label>Your rules
+        <textarea id="rulesText" rows="4" placeholder="Grandma can pay up to $80 on her own. Anything over $250 should be blocked. She can always pay pharmacy@example.com without asking."></textarea>
+      </label>
+      <button id="saveRules">Save rules</button>
+      <p id="rulesMsg" class="muted"></p>
+      <p id="rulesNow" class="muted"></p>
+    </div>
+
+    <h2>2. Payments waiting for you</h2>
+    <div id="pending"></div>
+
+    <h2>3. Activity</h2>
+    <div id="activity" class="card"></div>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    function el(tag, text, cls) {
+      const e = document.createElement(tag);
+      if (text) e.textContent = text;
+      if (cls) e.className = cls;
+      return e;
+    }
+
+    const LABELS = {
+      approved: "Approved",
+      held: "Held for Guardian",
+      blocked: "Blocked",
+      guardian_approved: "Guardian approved",
+      guardian_declined: "Guardian declined",
+    };
+
+    async function loadRules() {
+      const res = await fetch("/api/rules");
+      const { rules } = await res.json();
+      const trusted = rules.trustedRecipients.length ? rules.trustedRecipients.join(", ") : "none";
+      $("rulesNow").textContent =
+        `Active rules: auto-approve up to $${rules.maxAutoApprove}, block above $${rules.hardBlockAbove}, trusted: ${trusted}.`;
+    }
+
+    async function saveRules() {
+      $("rulesMsg").textContent = "Reading your rules...";
+      $("saveRules").disabled = true;
+      try {
+        const res = await fetch("/api/rules", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: $("rulesText").value }),
+        });
+        const data = await res.json();
+        $("rulesMsg").textContent = res.ok ? "Saved. " + data.summary : data.error;
+        loadRules();
+      } catch (e) {
+        $("rulesMsg").textContent = "Could not reach the server.";
+      }
+      $("saveRules").disabled = false;
+    }
+
+    async function decide(id, decision) {
+      await fetch(`/api/requests/${id}/decide`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision }),
+      });
+      refresh();
+    }
+
+    async function loadPending() {
+      const list = await (await fetch("/api/requests")).json();
+      const box = $("pending");
+      box.replaceChildren();
+      if (!list.length) {
+        box.appendChild(el("p", "Nothing waiting. All clear.", "muted"));
+        return;
+      }
+      for (const r of list) {
+        const card = el("div", null, "card");
+        const who = r.payment.recipient || "(no recipient)";
+        card.appendChild(el("strong", `$${Number(r.payment.amount).toFixed(2)} to ${who}`));
+        if (r.payment.note) card.appendChild(el("p", "Note: " + r.payment.note));
+        card.appendChild(el("p", r.reasons.join(" "), "muted"));
+        const row = el("div", null, "row");
+        const yes = el("button", "Approve");
+        yes.onclick = () => decide(r.id, "approve");
+        const no = el("button", "Decline", "secondary");
+        no.onclick = () => decide(r.id, "decline");
+        row.append(yes, no);
+        card.appendChild(row);
+        box.appendChild(card);
+      }
+    }
+
+    async function loadActivity() {
+      const list = await (await fetch("/api/activity")).json();
+      const box = $("activity");
+      box.replaceChildren();
+      if (!list.length) {
+        box.appendChild(el("p", "No activity yet.", "muted"));
+        return;
+      }
+      for (const a of list) {
+        const time = new Date(a.time).toLocaleTimeString();
+        const who = a.payment.recipient || "(no recipient)";
+        const line = `${time}  ${LABELS[a.type] || a.type}: $${Number(a.payment.amount).toFixed(2)} to ${who}`;
+        box.appendChild(el("div", line, "log"));
+      }
+    }
+
+    function refresh() {
+      loadPending().catch(() => {});
+      loadActivity().catch(() => {});
+    }
+
+    $("saveRules").addEventListener("click", saveRules);
+    loadRules();
+    refresh();
+    setInterval(refresh, 3000);
+  </script>
+</body>
+</html>

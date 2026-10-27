@@ -21,6 +21,7 @@
         <textarea id="rulesText" rows="4" placeholder="Grandma can pay up to $80 on her own. Anything over $250 should be blocked. She can always pay pharmacy@example.com without asking."></textarea>
       </label>
       <button id="saveRules">Save rules</button>
+            <button type="button" id="example" class="secondary">Use an example</button>
       <p id="rulesMsg" class="muted"></p>
       <p id="rulesNow" class="muted"></p>
     </div>
@@ -121,8 +122,15 @@
       for (const a of list) {
         const time = new Date(a.time).toLocaleTimeString();
         const who = a.payment.recipient || "(no recipient)";
-        const line = `${time}  ${LABELS[a.type] || a.type}: $${Number(a.payment.amount).toFixed(2)} to ${who}`;
-        box.appendChild(el("div", line, "log"));
+                const row = el("div", null, "log");
+        const kind =
+          a.type === "approved" || a.type === "guardian_approved" ? "b-ok" :
+          a.type === "held" ? "b-wait" : "b-bad";
+        row.appendChild(el("span", LABELS[a.type] || a.type, "badge " + kind));
+        row.appendChild(document.createTextNode(
+          `${time} · $${Number(a.payment.amount).toFixed(2)} to ${who}`
+        ));
+        box.appendChild(row);
       }
     }
 
@@ -132,6 +140,10 @@
     }
 
     $("saveRules").addEventListener("click", saveRules);
+        $("example").addEventListener("click", () => {
+      $("rulesText").value =
+        "Grandma can pay up to $80 on her own. Anything over $250 should be blocked. She can always pay pharmacy@example.com without asking. Flag anything that mentions lottery.";
+    });
     loadRules();
     refresh();
     setInterval(refresh, 3000);

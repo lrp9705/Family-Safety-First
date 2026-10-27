@@ -16,6 +16,12 @@
     <h1>Send a payment</h1>
     <p class="muted">Your Guardian helps keep your money safe. Every payment is checked before it is sent.</p>
 
+        <p class="muted"><strong>Try an example:</strong></p>
+    <div class="chips">
+      <button type="button" class="chip" data-a="45" data-r="pharmacy@example.com" data-n="monthly medicine">Normal payment</button>
+      <button type="button" class="chip" data-a="300" data-r="pharmacy@example.com" data-n="">Large amount</button>
+      <button type="button" class="chip" data-a="40" data-r="stranger@example.com" data-n="Fee to claim your prize, act now">Scam wording</button>
+    </div>
     <div class="card">
       <label>Amount (USD)
         <input id="amount" type="number" min="0.01" step="0.01" value="45">
@@ -75,9 +81,17 @@
       }, 3000);
     }
 
+        document.querySelectorAll(".chip").forEach((c) =>
+      c.addEventListener("click", () => {
+        $("amount").value = c.dataset.a;
+        $("recipient").value = c.dataset.r;
+        $("note").value = c.dataset.n;
+      })
+    );
     $("pay").addEventListener("click", async () => {
       clearInterval(timer);
       $("pay").disabled = true;
+      $("pay").textContent = "Checking...";
       const body = {
         amount: $("amount").value,
         recipient: $("recipient").value.trim(),
@@ -111,6 +125,7 @@
         show("bad", "Something went wrong", ["Could not reach the server."]);
       }
       $("pay").disabled = false;
+      $("pay").textContent = "Pay";
     });
   </script>
 </body>

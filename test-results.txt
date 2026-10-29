@@ -1,4 +1,4 @@
-Test set results (2026-10-29T00:52:06.921Z)
+Test set results (2026-10-29T00:58:24.674Z)
 Payments tested: 21 (7 normal, 2 harmless to a new person, 12 scams)
 
 Scams stopped by rules alone:      5 of 12 (42%)

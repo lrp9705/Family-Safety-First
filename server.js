@@ -3,6 +3,7 @@ const express = require("express");
 const crypto = require("crypto");
 const { evaluatePayment, defaultRules } = require("./guardian");
 const { parseRules } = require("./ai-rules");
+const { assessRisk } = require("./ai-risk");
 
 const app = express();
 app.use(express.json());
@@ -93,15 +94,10 @@ function logEvent(type, payment, reasons, requestId) {
   });
 }
 
-// ---- Health check ----
-app.get("/", (req, res) => {
-  res.send("Family Safety First server is running");
-});
-
 // ---- Rules ----
 app.post("/api/rules", async (req, res) => {
   try {
-    const text = (req.body.text || "").slice(0, 1000);
+    const text = ((req.body || {}).text || "").slice(0, 1000);
     if (!text.trim()) {
       return res.status(400).json({ error: "Please write the rules first." });
     }
@@ -121,13 +117,33 @@ app.get("/api/rules", (req, res) => {
 // ---- The Member tries to pay ----
 app.post("/api/orders", async (req, res) => {
   try {
+    const body = req.body || {};
     const payment = {
-      amount: req.body.amount || "10.00",
-      recipient: req.body.recipient,
-      note: req.body.note,
+      amount: body.amount || "10.00",
+      recipient: body.recipient,
+      note: body.note,
     };
 
-    const verdict = evaluatePayment(payment, currentRules);
+    let verdict = evaluatePayment(payment, currentRules);
+
+    // AI second opinion on anything the rules did not already block.
+    // The AI can only make things stricter, never looser.
+    if (verdict.decision !== "block") {
+      const ai = await assessRisk(payment, currentRules);
+      if (ai && ai.risk !== "low" && ai.explanation) {
+        if (verdict.decision === "approve" && ai.risk === "high") {
+          verdict = {
+            decision: "ask",
+            reasons: [`Our safety assistant noticed something unusual: ${ai.explanation}`],
+          };
+        } else if (verdict.decision === "ask") {
+          verdict = {
+            decision: "ask",
+            reasons: [...verdict.reasons, `Our safety assistant noted: ${ai.explanation}`],
+          };
+        }
+      }
+    }
 
     if (verdict.decision === "block") {
       logEvent("blocked", payment, verdict.reasons);
@@ -179,7 +195,7 @@ app.post("/api/requests/:id/decide", async (req, res) => {
       return res.status(409).json({ error: "This request was already decided." });
     }
 
-    const choice = req.body.decision;
+    const choice = (req.body || {}).decision;
     if (choice !== "approve" && choice !== "decline") {
       return res.status(400).json({ error: 'decision must be "approve" or "decline".' });
     }
@@ -206,7 +222,6 @@ app.post("/api/requests/:id/decide", async (req, res) => {
     res.status(500).json({ error: "Could not process the decision" });
   }
 });
-
 
 // ---- Member checks on one request ----
 app.get("/api/requests/:id", (req, res) => {

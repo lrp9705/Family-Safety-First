@@ -1,0 +1,8 @@
+Test set results (2026-10-29T00:52:06.921Z)
+Payments tested: 21 (7 normal, 2 harmless to a new person, 12 scams)
+
+Scams stopped by rules alone:      5 of 12 (42%)
+Scams stopped by rules + AI:       12 of 12 (100%)
+Normal payments sent without delay: 7 of 7 (100%)
+Harmless new-person payments held for the Guardian: 2 of 2 (held by design)
+AI checks that failed (fell back to rules): 0
